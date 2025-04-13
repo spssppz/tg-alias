@@ -6,16 +6,46 @@
   <title>Элиас — Командная игра</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap" rel="stylesheet">
   <style>
     body {
       margin: 0;
-      font-family: sans-serif;
-      background-color: var(--tg-theme-bg-color, #ffffff);
-      color: var(--tg-theme-text-color, #000000);
+      font-family: 'Montserrat', sans-serif;
+      background: linear-gradient(to right, #f7f7f7, #e0e0e0);
+      color: #333;
       display: flex;
       justify-content: center;
       align-items: center;
       height: 100vh;
+      animation: fadeIn 0.5s ease-in;
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+      }
+
+      to {
+        opacity: 1;
+      }
+    }
+
+    @keyframes pulse {
+      0% {
+        color: red;
+      }
+
+      50% {
+        color: darkred;
+      }
+
+      100% {
+        color: red;
+      }
+    }
+
+    .pulse {
+      animation: pulse 1s infinite;
     }
 
     .screen {
@@ -23,6 +53,7 @@
       flex-direction: column;
       align-items: center;
       text-align: center;
+      animation: fadeIn 0.5s ease-in;
     }
 
     .active {
@@ -30,24 +61,34 @@
     }
 
     button {
-      margin-top: 20px;
+      margin-top: 10px;
       padding: 10px 20px;
       font-size: 16px;
-      border-radius: 8px;
+      border-radius: 12px;
       border: none;
       background: #2AABEE;
       color: white;
       cursor: pointer;
+      transition: background 0.3s;
     }
 
+    button:hover {
+      background: #2299d1;
+    }
+
+    input,
     select {
       padding: 8px;
       margin-top: 10px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
     }
 
     .word {
-      font-size: 32px;
+      font-size: 36px;
+      font-weight: bold;
       margin: 20px 0;
+      animation: fadeIn 0.5s ease-in;
     }
 
     .scoreboard {
@@ -56,16 +97,34 @@
     }
 
     .timer {
-      font-size: 20px;
+      font-size: 24px;
       margin-bottom: 10px;
+    }
+
+    .countdown {
+      font-size: 48px;
+      margin-top: 20px;
+      animation: fadeIn 0.5s ease-in;
     }
   </style>
 </head>
 
 <body>
+  <audio id="start-sound" src="https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg"></audio>
+  <audio id="end-sound" src="https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg"></audio>
+
   <div class="screen active" id="start-screen">
     <h1>Элиас</h1>
-    <p>Выберите сложность</p>
+    <label>До скольки очков играем:
+      <input type="number" id="win-score" value="20" min="1">
+    </label>
+    <label>Сколько секунд на раунд:
+      <input type="number" id="round-time" value="60" min="10">
+    </label>
+    <label>Сколько команд?
+      <input type="number" id="team-count" value="2" min="2" max="4">
+    </label>
+    <div id="team-names"></div>
     <label>Сложность:
       <select id="difficulty-select">
         <option value="easy">Легко</option>
@@ -73,9 +132,17 @@
         <option value="hard">Сложно</option>
       </select>
     </label>
-    <p>Кто начинает?</p>
-    <button onclick="chooseTeam(1)">Команда 1</button>
-    <button onclick="chooseTeam(2)">Команда 2</button>
+    <button onclick="startGameSetup()">Начать</button>
+  </div>
+
+  <div class="screen" id="turn-screen">
+    <h2>Передайте телефон</h2>
+    <p>Ход команды <span id="next-team"></span></p>
+    <button onclick="startTurnCountdown()">Играть</button>
+  </div>
+
+  <div class="screen" id="countdown-screen">
+    <div class="countdown" id="countdown-display">3</div>
   </div>
 
   <div class="screen" id="game-screen">
@@ -83,20 +150,12 @@
     <div class="word" id="word-display">Слово</div>
     <button onclick="nextWord(true)">Угадали ✅</button>
     <button onclick="nextWord(false)">Пропустить 🔄</button>
-    <div class="scoreboard">
-      Команда 1: <span id="score1">0</span> | Команда 2: <span id="score2">0</span>
-    </div>
-  </div>
-
-  <div class="screen" id="turn-screen">
-    <h2>Передайте телефон</h2>
-    <p>Ход Команды <span id="next-team"></span></p>
-    <button onclick="startTurn()">Играть</button>
+    <div class="scoreboard" id="scoreboard"></div>
   </div>
 
   <div class="screen" id="end-screen">
     <h2>Победа!</h2>
-    <p>Выиграла Команда <span id="winner"></span> 🎉</p>
+    <p>Выиграла команда <span id="winner"></span> 🎉</p>
     <button onclick="restartGame()">Сыграть ещё раз</button>
   </div>
 
@@ -106,11 +165,38 @@
 
     let words = [];
     let currentWordIndex = 0;
-    let score1 = 0;
-    let score2 = 0;
-    let currentTeam = 1;
+    let teams = [];
+    let currentTeamIndex = 0;
     let timer;
     let countdown = 60;
+    let winningScore = 20;
+    let roundDuration = 60;
+
+    document.getElementById('team-count').addEventListener('input', generateTeamInputs);
+
+    function generateTeamInputs() {
+      const teamCount = parseInt(document.getElementById('team-count').value);
+      const container = document.getElementById('team-names');
+      container.innerHTML = '';
+
+      for (let i = 0; i < teamCount; i++) {
+        const input = document.createElement('input');
+        input.placeholder = `Название команды ${i + 1}`;
+        input.value = `Команда ${i + 1}`;
+        input.id = `team-${i}`;
+        container.appendChild(input);
+      }
+
+      const confirmBtn = document.createElement('button');
+      confirmBtn.textContent = 'Подтвердить';
+      confirmBtn.onclick = confirmTeamNames;
+      confirmBtn.id = 'confirm-btn';
+      container.appendChild(confirmBtn);
+    }
+
+    function startGameSetup() {
+      generateTeamInputs();
+    }
 
     function getWordFile() {
       const difficulty = document.getElementById('difficulty-select').value;
@@ -130,18 +216,57 @@
       }
     }
 
+    function shuffleWords() {
+      for (let i = words.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [words[i], words[j]] = [words[j], words[i]];
+      }
+    }
+
+    async function confirmTeamNames() {
+      const count = parseInt(document.getElementById('team-count').value);
+      winningScore = parseInt(document.getElementById('win-score').value);
+      roundDuration = parseInt(document.getElementById('round-time').value);
+      teams = [];
+      for (let i = 0; i < count; i++) {
+        teams.push({ name: document.getElementById(`team-${i}`).value, score: 0 });
+      }
+      await fetchWords();
+      updateScoreboard();
+      showTurnScreen();
+    }
+
+    function updateScoreboard() {
+      const board = document.getElementById('scoreboard');
+      board.innerHTML = teams.map((t, i) => `${t.name}: ${t.score}`).join(' | ');
+    }
+
     function showScreen(id) {
       document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
       document.getElementById(id).classList.add('active');
     }
 
-    async function chooseTeam(team) {
-      currentTeam = team;
-      await fetchWords();
-      showScreen('game-screen');
-      showWord();
-      startTimer();
-      updateScoreboard();
+    function showTurnScreen() {
+      document.getElementById('next-team').textContent = teams[currentTeamIndex].name;
+      showScreen('turn-screen');
+    }
+
+    function startTurnCountdown() {
+      let seconds = 3;
+      showScreen('countdown-screen');
+      document.getElementById('countdown-display').textContent = seconds;
+      const countdownInterval = setInterval(() => {
+        seconds--;
+        if (seconds <= 0) {
+          clearInterval(countdownInterval);
+          showScreen('game-screen');
+          document.getElementById('start-sound').play();
+          showWord();
+          startTimer();
+        } else {
+          document.getElementById('countdown-display').textContent = seconds;
+        }
+      }, 1000);
     }
 
     function showWord() {
@@ -150,8 +275,7 @@
 
     function nextWord(correct) {
       if (correct) {
-        if (currentTeam === 1) score1++;
-        else score2++;
+        teams[currentTeamIndex].score++;
         checkWinner();
       }
       currentWordIndex++;
@@ -163,63 +287,37 @@
       updateScoreboard();
     }
 
-    function updateScoreboard() {
-      document.getElementById('score1').textContent = score1;
-      document.getElementById('score2').textContent = score2;
-    }
-
     function startTimer() {
-      countdown = 60;
-      document.getElementById('timer-display').textContent = countdown;
+      countdown = roundDuration;
+      const timerDisplay = document.getElementById('timer-display');
+      timerDisplay.classList.remove('pulse');
+      timerDisplay.textContent = countdown;
       timer = setInterval(() => {
         countdown--;
-        document.getElementById('timer-display').textContent = countdown;
+        timerDisplay.textContent = countdown;
+        if (countdown <= 5) {
+          timerDisplay.classList.add('pulse');
+        }
         if (countdown <= 0) {
           clearInterval(timer);
-          changeTurn();
+          document.getElementById('end-sound').play();
+          currentTeamIndex = (currentTeamIndex + 1) % teams.length;
+          showTurnScreen();
         }
       }, 1000);
     }
 
-    function changeTurn() {
-      currentTeam = currentTeam === 1 ? 2 : 1;
-      document.getElementById('next-team').textContent = currentTeam;
-      showScreen('turn-screen');
-    }
-
-    function startTurn() {
-      showScreen('game-screen');
-      startTimer();
-    }
-
     function checkWinner() {
-      if (score1 >= 20) {
-        endGame(1);
-      } else if (score2 >= 20) {
-        endGame(2);
+      const winner = teams.find(team => team.score >= winningScore);
+      if (winner) {
+        clearInterval(timer);
+        document.getElementById('winner').textContent = winner.name;
+        showScreen('end-screen');
       }
-    }
-
-    function endGame(winnerTeam) {
-      clearInterval(timer);
-      document.getElementById('winner').textContent = winnerTeam;
-      showScreen('end-screen');
     }
 
     function restartGame() {
-      score1 = 0;
-      score2 = 0;
-      currentWordIndex = 0;
-      currentTeam = 1;
-      updateScoreboard();
-      showScreen('start-screen');
-    }
-
-    function shuffleWords() {
-      for (let i = words.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [words[i], words[j]] = [words[j], words[i]];
-      }
+      location.reload();
     }
   </script>
 </body>
