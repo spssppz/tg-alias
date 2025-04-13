@@ -40,6 +40,11 @@
       cursor: pointer;
     }
 
+    select {
+      padding: 8px;
+      margin-top: 10px;
+    }
+
     .word {
       font-size: 32px;
       margin: 20px 0;
@@ -60,7 +65,15 @@
 <body>
   <div class="screen active" id="start-screen">
     <h1>Элиас</h1>
-    <p>Выберите команду, которая начнёт игру</p>
+    <p>Выберите сложность</p>
+    <label>Сложность:
+      <select id="difficulty-select">
+        <option value="easy">Легко</option>
+        <option value="medium" selected>Средне</option>
+        <option value="hard">Сложно</option>
+      </select>
+    </label>
+    <p>Кто начинает?</p>
     <button onclick="chooseTeam(1)">Команда 1</button>
     <button onclick="chooseTeam(2)">Команда 2</button>
   </div>
@@ -91,7 +104,7 @@
     const tg = window.Telegram.WebApp;
     tg.expand();
 
-    const words = ["Кот", "Самолёт", "Очки", "Пляж", "Гитара", "Телевизор", "Пицца", "Машина", "Снеговик", "Огурец"];
+    let words = [];
     let currentWordIndex = 0;
     let score1 = 0;
     let score2 = 0;
@@ -99,14 +112,32 @@
     let timer;
     let countdown = 60;
 
+    function getWordFile() {
+      const difficulty = document.getElementById('difficulty-select').value;
+      return `default_${difficulty}.txt`;
+    }
+
+    async function fetchWords() {
+      const file = getWordFile();
+      try {
+        const res = await fetch(file);
+        const text = await res.text();
+        words = text.split('\n').map(w => w.trim()).filter(Boolean);
+        shuffleWords();
+      } catch (e) {
+        console.error('Ошибка загрузки слов:', e);
+        words = ["Ошибка", "Нет", "Слов"];
+      }
+    }
+
     function showScreen(id) {
       document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
       document.getElementById(id).classList.add('active');
     }
 
-    function chooseTeam(team) {
+    async function chooseTeam(team) {
       currentTeam = team;
-      shuffleWords();
+      await fetchWords();
       showScreen('game-screen');
       showWord();
       startTimer();
