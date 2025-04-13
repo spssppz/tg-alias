@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Элиас — TMA</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    body {
+      margin: 0;
+      font-family: sans-serif;
+      background-color: var(--tg-theme-bg-color, #ffffff);
+      color: var(--tg-theme-text-color, #000000);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+    .screen {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+    }
+    .active {
+      display: flex;
+    }
+    button {
+      margin-top: 20px;
+      padding: 10px 20px;
+      font-size: 16px;
+      border-radius: 8px;
+      border: none;
+      background: #2AABEE;
+      color: white;
+      cursor: pointer;
+    }
+    .word {
+      font-size: 32px;
+      margin: 20px 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="screen active" id="start-screen">
+    <h1>Элиас</h1>
+    <p>Объясни слово, не называя его!</p>
+    <button onclick="startGame()">Начать</button>
+  </div>
+
+  <div class="screen" id="game-screen">
+    <div class="word" id="word-display">Слово</div>
+    <button onclick="nextWord(true)">Угадали ✅</button>
+    <button onclick="nextWord(false)">Пропустить 🔄</button>
+  </div>
+
+  <div class="screen" id="end-screen">
+    <h2>Игра окончена!</h2>
+    <p>Счёт: <span id="score">0</span></p>
+    <button onclick="restartGame()">Сыграть ещё раз</button>
+  </div>
+
+  <script>
+    const tg = window.Telegram.WebApp;
+    tg.expand();
+
+    const words = ["Кот", "Самолёт", "Очки", "Пляж", "Гитара", "Телевизор"];
+    let currentWordIndex = 0;
+    let score = 0;
+    let timer;
+
+    function showScreen(id) {
+      document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+      document.getElementById(id).classList.add('active');
+    }
+
+    function startGame() {
+      currentWordIndex = 0;
+      score = 0;
+      showScreen('game-screen');
+      showWord();
+      startTimer();
+    }
+
+    function showWord() {
+      document.getElementById('word-display').textContent = words[currentWordIndex];
+    }
+
+    function nextWord(correct) {
+      if (correct) score++;
+      currentWordIndex++;
+      if (currentWordIndex >= words.length) {
+        endGame();
+      } else {
+        showWord();
+      }
+    }
+
+    function endGame() {
+      clearTimeout(timer);
+      document.getElementById('score').textContent = score;
+      showScreen('end-screen');
+    }
+
+    function restartGame() {
+      showScreen('start-screen');
+    }
+
+    function startTimer() {
+      timer = setTimeout(() => {
+        endGame();
+      }, 60000); // 60 секунд
+    }
+  </script>
+</body>
+</html>
